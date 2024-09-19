@@ -1,6 +1,130 @@
 import ply.yacc as yacc
+from lex import lexer , tokens
 
-# パーサールール
+def p_start(p):
+    '''start : statement_list'''
+    p[0] = p[1]
+
+def p_method_chain(p):
+    '''method_chain : expression DOUBLECOLON NAME LPAREN param_list RPAREN
+                    | expression DOUBLECOLON NAME LPAREN RPAREN
+                    | expression DOT NAME LPAREN param_list RPAREN
+                    | expression DOT NAME LPAREN RPAREN'''
+    if len(p) == 6:
+        p[0] = ('method_chain', p[1], p[3])
+    else:
+        p[0] = ('method_chain_with_params', p[1], p[3], p[5])
+
+def p_function_call(p):
+    '''function_call : NAME LPAREN param_list RPAREN
+                     | NAME LPAREN RPAREN
+                     | path DOUBLECOLON NAME LPAREN param_list RPAREN
+                     | path DOUBLECOLON NAME LPAREN RPAREN'''
+    if len(p) == 4:
+        p[0] = ('function_call', p[1])
+    elif len(p) == 5:
+        p[0] = ('function_call', p[1], p[3])
+    else:
+        p[0] = ('function_call_with_params', p[1], p[3], p[5])
+
+def p_use_declaration(p):
+    '''use_declaration : USE path SEMICOLON
+                       | USE path DOUBLECOLON MULT SEMICOLON'''  # グロブインポートを追加
+    if len(p) == 4:
+        p[0] = ('use_declaration', p[2])
+    else:
+        p[0] = ('use_glob_declaration', p[2])
+
+def p_path(p):
+    '''path : NAME
+            | path DOUBLECOLON NAME'''
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = ('path', p[1], p[3])
+
+def p_const_declaration(p):
+    '''const_declaration : CONST NAME COLON TYPE EQ expression SEMICOLON'''
+    p[0] = ('const_declaration', p[2], p[4], p[6])
+
+def p_impl_block(p):
+    '''impl_block : IMPL NAME LBRACE statement_list RBRACE'''
+    p[0] = ('impl_block', p[2], p[4])
+
+def p_attribute(p):
+    '''attribute : HASH LBRACKET NAME LPAREN NAME RPAREN RBRACKET'''
+    p[0] = ('attribute', p[3], p[5])
+
+# mod キーワードの構文ルールを追加
+def p_mod_declaration(p):
+    '''mod_declaration : MOD_KEYWORD NAME SEMICOLON
+                       | MOD_KEYWORD NAME LBRACE statement_list RBRACE'''
+    if len(p) == 4:
+        p[0] = ('mod_declaration', p[2])
+    else:
+        p[0] = ('mod_declaration', p[2], p[4])
+
+def p_extern_declaration(p):
+    '''extern_declaration : EXTERN CRATE NAME SEMICOLON
+                          | EXTERN STRING_LITERAL LBRACE extern_function_list RBRACE'''
+    if len(p) == 4:
+        p[0] = ('extern_declaration', p[3])
+    else:
+        p[0] = ('extern_block', p[2], p[4])
+
+def p_extern_function_list(p):
+    '''extern_function_list : extern_function
+                            | extern_function extern_function_list
+                            | empty'''
+    if len(p) == 2:
+        p[0] = [p[1]] if p[1] is not None else []
+    elif len(p) == 3:
+        p[0] = [p[1]] + p[2]
+
+def p_extern_function(p):
+    '''extern_function : FN NAME LPAREN RPAREN SEMICOLON'''
+    p[0] = ('extern_function', p[2])
+
+def p_param_list(p):
+    '''param_list : param
+                  | param COMMA param_list
+                  | empty'''
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = [p[1]] + p[3]
+
+def p_param(p):
+    '''param : NAME COLON TYPE'''
+    p[0] = (p[1], p[3])
+
+def p_statement_list(p):
+    '''statement_list : statement
+                      | statement statement_list'''
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = [p[1]] + p[2]
+
+def p_statement(p):
+    '''statement : expression
+                 | function
+                 | loop_statement
+                 | break_statement
+                 | continue_statement
+                 | extern_declaration
+                 | mod_declaration
+                 | const_declaration
+                 | use_declaration
+                 | method_chain
+                 | function_call'''
+    p[0] = p[1]
+
+
+def p_lambda(p):
+    '''LAMBDA : PIPE NAME PIPE'''
+    p[0] = ('lambda', p[2])
+
 def p_function(p):
     '''function : FN NAME LPAREN param_list RPAREN ARROW TYPE LBRACE statement_list RBRACE
                 | UNSAFE_FN NAME LPAREN param_list RPAREN ARROW TYPE LBRACE statement_list RBRACE
@@ -127,10 +251,13 @@ def p_empty(p):
     p[0] = None
 
 def p_error(p):
-    print(f"Syntax error at '{p.value}'")
+    if p:
+        print(f"Syntax error at '{p.value}' (line {p.lineno})")
+    else:
+        print("Syntax error at EOF")
 
 # パーサーの生成
-parser = yacc.yacc()
+parser = yacc.yacc(debug=True)
 
 # テスト用のRustコード
 rust_code = """
@@ -178,5 +305,5 @@ fn main() {
 """
 
 # パースの実行
-result = parser.parse(rust_code)
-print(result)
+#result = parser.parse(rust_code)
+#print(result)

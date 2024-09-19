@@ -4,7 +4,9 @@ import toml
 import requests
 from zipfile import ZipFile
 import argparse
-from parser import parser
+from parser import parser, lexer
+import tarfile
+from simulator import RustSimulator
 
 # 依存関係をダウンロードするディレクトリ
 MODULES_DIR = "rust_modules"
@@ -23,6 +25,7 @@ def parse_cargo_toml(file_path):
     return dependencies
 
 # 依存関係をダウンロードする関数
+
 def download_dependencies(dependencies):
     """依存関係をダウンロードして、rust_modulesフォルダに格納"""
     if not os.path.exists(MODULES_DIR):
@@ -30,10 +33,8 @@ def download_dependencies(dependencies):
     
     for dep_name, version_info in dependencies.items():
         if isinstance(version_info, str):
-            # シンプルなバージョン指定の場合
             version = version_info
         elif isinstance(version_info, dict):
-            # 詳細な指定がある場合
             version = version_info.get("version", "")
         
         download_url = f"https://crates.io/api/v1/crates/{dep_name}/{version}/download"
@@ -41,16 +42,19 @@ def download_dependencies(dependencies):
         
         response = requests.get(download_url)
         if response.status_code == 200:
-            # ダウンロードしたファイルを保存
-            zip_path = os.path.join(MODULES_DIR, f"{dep_name}.zip")
-            with open(zip_path, 'wb') as f:
+            # クレートファイルを保存
+            file_path = os.path.join(MODULES_DIR, f"{dep_name}-{version}.crate")
+            with open(file_path, 'wb') as f:
                 f.write(response.content)
             
-            # ダウンロードしたZIPを展開
-            with ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(os.path.join(MODULES_DIR, dep_name))
-            os.remove(zip_path)  # ZIPファイルを削除
-            print(f"{dep_name} のダウンロードが完了しました")
+            # クレートファイルを展開
+            if tarfile.is_tarfile(file_path):
+                with tarfile.open(file_path, 'r:gz') as tar:
+                    tar.extractall(path=os.path.join(MODULES_DIR, dep_name))
+                os.remove(file_path)  # TARファイルを削除
+                print(f"{dep_name} の展開が完了しました")
+            else:
+                print(f"{dep_name} はTARファイルではありません")
         else:
             print(f"{dep_name} のダウンロードに失敗しました")
 
@@ -60,12 +64,14 @@ def simulate_rust_file(file_path):
     print(f"{file_path} の解析を開始します")
 
     # Rustファイルの読み込み
-    with open(file_path, 'r') as f:
+    with open(file_path, 'r', encoding='utf-8') as f:
         rust_code = f.read()
-
+    lexer.input(rust_code)
+    for token in lexer:
+        print(token)
     # Rustファイルの解析とシミュレーション（この部分はRust解析コードに依存）
     # パーサーを呼び出して、実際のRustコードの解析とシミュレーションを行う
-    ast = parser.parse(rust_code)  # パーサーの呼び出し（parserは事前定義されたもの）
+    ast = parser.parse(rust_code, lexer=lexer)  # パーサーの呼び出し（parserは事前定義されたもの）
     
     # シミュレーターを使ってASTを評価し、結果を出力
     simulator = RustSimulator()  # Rust解析シミュレータのインスタンス化
