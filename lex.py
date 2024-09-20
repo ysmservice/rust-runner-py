@@ -3,7 +3,7 @@ import ply.lex as lex
 # トークンリスト
 tokens = (
     'EXTERN', 'CRATE', 'FN', 'LET', 'MUT', 'IF', 'ELSE', 'WHILE', 'FOR', 'IN', 'MATCH', 'STRUCT', 'ENUM', 'IMPL', 'USE', 'MOD_KEYWORD',
-    'RETURN', 'ASYNC', 'AWAIT', 'DYN', 'BOX', 'RC', 'ARC', 'UNSAFE', 'LIFETIME', 'CONST', 'TYPE', 'WHERE', 'MOVE',
+    'RETURN', 'ASYNC', 'AWAIT', 'DYN', 'BOX', 'RC', 'AS', 'UNSAFE', 'LIFETIME', 'CONST', 'TYPE', 'WHERE', 'MOVE',
     'PUB', 'SUPER', 'SELF', 'LOOP', 'BREAK', 'CONTINUE', 'CLOSURE', 'PIPE', 'UNSAFE_FN',
     'COLON', 'COMMA', 'SEMICOLON', 'ARROW', 'FAT_ARROW', 'LPAREN', 'RPAREN', 'LBRACE', 'RBRACE',
     'EQ', 'PLUS', 'MINUS', 'MULT', 'DIV', 'MOD', 'NUMBER', 'STRING', 'CHAR', 'BOOL', 'LBRACKET', 'RBRACKET', 'DOT',
@@ -36,7 +36,7 @@ keywords = {
     'dyn': 'DYN',
     'Box': 'BOX',
     'Rc': 'RC',
-    'Arc': 'ARC',
+    'as': 'AS',
     'unsafe': 'UNSAFE',
     'const': 'CONST',
     'type': 'TYPE',
@@ -74,7 +74,7 @@ t_RBRACE = r'\}'
 t_LBRACKET = r'\['
 t_RBRACKET = r'\]'
 t_COLON = r':'
-t_COMMA = r','
+t_COMMA = r'\,'
 t_SEMICOLON = r';'
 t_ARROW = r'->'
 t_FAT_ARROW = r'=>'
@@ -106,7 +106,7 @@ def t_STRING(t):
 
 # ライフタイム
 def t_LIFETIME(t):
-    r"'\w+"
+    r"'[a-zA-Z_][a-zA-Z0-9_]*"
     return t
 
 # コメントと無視する文字

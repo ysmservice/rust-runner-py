@@ -66,9 +66,9 @@ def simulate_rust_file(file_path):
     # Rustファイルの読み込み
     with open(file_path, 'r', encoding='utf-8') as f:
         rust_code = f.read()
-    lexer.input(rust_code)
-    for token in lexer:
-        print(token)
+    #lexer.input(rust_code)
+    #for token in lexer:
+    #    print(token)
     # Rustファイルの解析とシミュレーション（この部分はRust解析コードに依存）
     # パーサーを呼び出して、実際のRustコードの解析とシミュレーションを行う
     ast = parser.parse(rust_code, lexer=lexer)  # パーサーの呼び出し（parserは事前定義されたもの）

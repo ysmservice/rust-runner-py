@@ -5,6 +5,99 @@ def p_start(p):
     '''start : statement_list'''
     p[0] = p[1]
 
+def p_tuple_fields(p):
+    '''tuple_fields : type_expr
+                    | type_expr COMMA tuple_fields'''
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = [p[1]] + p[3]
+
+def p_struct_declaration(p):
+    '''struct_declaration : STRUCT NAME LBRACE struct_fields RBRACE
+                          | STRUCT NAME LPAREN tuple_fields RPAREN SEMICOLON
+                          | PUB STRUCT NAME LBRACE struct_fields RBRACE
+                          | PUB STRUCT NAME LPAREN tuple_fields RPAREN SEMICOLON'''
+    if len(p) == 6:
+        if p[3] == '{':
+            p[0] = ('struct', p[2], p[4])  # 通常のstruct定義
+        else:
+            p[0] = ('tuple_struct', p[2], p[4])  # タプル形式の構造体
+    else:
+        if p[4] == '{':
+            p[0] = ('pub_struct', p[3], p[5])  # 公開struct定義
+        else:
+            p[0] = ('pub_tuple_struct', p[3], p[5])  # 公開タプル形式の構造体
+
+def p_struct_fields(p):
+    '''struct_fields : struct_field
+                     | struct_field COMMA struct_fields
+                     | struct_field COMMA'''
+    if len(p) != 4:
+        p[0] = [p[1]]
+    else:
+        p[0] = [p[1]] + p[3]
+
+def p_struct_field(p):
+    '''struct_field : NAME COLON type_expr'''
+    p[0] = (p[1], p[3])  # フィールド名と型のペア
+
+
+def p_type_declaration(p):
+    '''type_declaration : TYPE type_expr EQ type_expr SEMICOLON'''
+    p[0] = ('type_declaration', p[2], p[4])
+
+def p_type_expr(p):
+    '''type_expr : NAME
+                 | path LESS param_list GREATER
+                 | BOX LESS dyn_expr GREATER
+                 | dyn_expr'''
+    if len(p) == 2:
+        p[0] = p[1]  # Simple type like "Context"
+    else:
+        p[0] = ('generic_type', p[1], p[3])  # Handle generic types like "Context<'a, Data, Error>"
+
+def p_dyn_expr(p):
+    '''dyn_expr : DYN path PLUS trait_bounds
+                | DYN path'''
+    if len(p) == 3:
+        p[0] = ('dyn', p[2])
+    else:
+        p[0] = ('dyn_with_bounds', p[2], p[4])
+
+def p_trait_bounds(p):
+    '''trait_bounds : NAME PLUS NAME
+                    | NAME PLUS NAME PLUS NAME
+                    | NAME'''
+    if len(p) == 2:
+        p[0] = p[1]
+    elif len(p) == 4:
+        p[0] = (p[1], p[3])
+    else:
+        p[0] = (p[1], p[3], p[5])
+
+    
+def p_call_param_list(p):
+    '''call_param_list : call_param
+                       | call_param COMMA param_list
+                       | empty'''
+    if len(p) == 2:
+        p[0] = [p[1]]
+    else:
+        p[0] = [p[1]] + p[3]
+
+def p_call_param(p):
+    '''call_param : expression'''
+    p[0] = p[1]  # Only return the single expression
+
+
+def p_macro_call(p):
+    '''macro_call : path NOT LPAREN STRING RPAREN
+                  | path NOT LPAREN expression RPAREN
+                  | path NOT LPAREN STRING RPAREN SEMICOLON
+                  | path NOT LPAREN expression RPAREN SEMICOLON'''
+    p[0] = ('macro_call', p[1], p[4])
+
 def p_method_chain(p):
     '''method_chain : expression DOUBLECOLON NAME LPAREN param_list RPAREN
                     | expression DOUBLECOLON NAME LPAREN RPAREN
@@ -16,9 +109,9 @@ def p_method_chain(p):
         p[0] = ('method_chain_with_params', p[1], p[3], p[5])
 
 def p_function_call(p):
-    '''function_call : NAME LPAREN param_list RPAREN
+    '''function_call : NAME LPAREN call_param_list RPAREN
                      | NAME LPAREN RPAREN
-                     | path DOUBLECOLON NAME LPAREN param_list RPAREN
+                     | path DOUBLECOLON NAME LPAREN call_param_list RPAREN
                      | path DOUBLECOLON NAME LPAREN RPAREN'''
     if len(p) == 4:
         p[0] = ('function_call', p[1])
@@ -29,19 +122,27 @@ def p_function_call(p):
 
 def p_use_declaration(p):
     '''use_declaration : USE path SEMICOLON
-                       | USE path DOUBLECOLON MULT SEMICOLON'''  # グロブインポートを追加
+                       | USE path DOUBLECOLON MULT SEMICOLON
+                       | USE path AS NAME SEMICOLON'''  # 別名インポートのサポート
     if len(p) == 4:
-        p[0] = ('use_declaration', p[2])
+        p[0] = ('use_declaration', p[2])  # 通常のインポート
+    elif len(p) == 6:
+        p[0] = ('use_glob_declaration', p[2])  # グロブインポート
     else:
-        p[0] = ('use_glob_declaration', p[2])
+        p[0] = ('use_alias_declaration', p[2], p[4])  # 別名インポート (as)
+
 
 def p_path(p):
     '''path : NAME
-            | path DOUBLECOLON NAME'''
+            | path DOUBLECOLON NAME
+            | path DOUBLECOLON LESS param_list GREATER
+            | path LESS param_list GREATER'''
     if len(p) == 2:
         p[0] = p[1]
-    else:
+    elif len(p) == 4:
         p[0] = ('path', p[1], p[3])
+    else:
+        p[0] = ('generic_path', p[1], p[3])
 
 def p_const_declaration(p):
     '''const_declaration : CONST NAME COLON TYPE EQ expression SEMICOLON'''
@@ -91,12 +192,20 @@ def p_param_list(p):
                   | empty'''
     if len(p) == 2:
         p[0] = [p[1]]
-    else:
+    elif len(p) == 4:
         p[0] = [p[1]] + p[3]
+    else:
+        p[0] = []
 
 def p_param(p):
-    '''param : NAME COLON TYPE'''
-    p[0] = (p[1], p[3])
+    '''param : NAME
+             | LIFETIME
+             | type_expr
+             | NAME COLON path'''
+    if len(p) == 4:
+        p[0] = (p[1], p[3])
+    else:
+        p[0] = p[1]
 
 def p_statement_list(p):
     '''statement_list : statement
@@ -117,7 +226,8 @@ def p_statement(p):
                  | const_declaration
                  | use_declaration
                  | method_chain
-                 | function_call'''
+                 | type_declaration
+                 | struct_declaration'''
     p[0] = p[1]
 
 
@@ -126,15 +236,27 @@ def p_lambda(p):
     p[0] = ('lambda', p[2])
 
 def p_function(p):
-    '''function : FN NAME LPAREN param_list RPAREN ARROW TYPE LBRACE statement_list RBRACE
-                | UNSAFE_FN NAME LPAREN param_list RPAREN ARROW TYPE LBRACE statement_list RBRACE
+    '''function : FN NAME LPAREN param_list RPAREN LBRACE statement_list RBRACE
+                | FN NAME LPAREN param_list RPAREN ARROW TYPE LBRACE statement_list RBRACE
+                | UNSAFE FN NAME LPAREN param_list RPAREN LBRACE statement_list RBRACE
+                | UNSAFE FN NAME LPAREN param_list RPAREN ARROW TYPE LBRACE statement_list RBRACE
+                | ASYNC FN NAME LPAREN param_list RPAREN LBRACE statement_list RBRACE
                 | ASYNC FN NAME LPAREN param_list RPAREN ARROW TYPE LBRACE statement_list RBRACE'''
-    if len(p) == 11:
-        p[0] = ('function', p[2], p[4], p[7], p[9])
+    if len(p) == 9:
+        p[0] = ('function', p[2], p[4], None, p[7])
+    elif len(p) == 10:
+        p[0] = ('function_with_type', p[2], p[4], p[7], p[9])
+    elif len(p) == 11:
+        if p[1] == 'unsafe':
+            p[0] = ('unsafe_function', p[3], p[5], None, p[8])
+        else:
+            p[0] = ('async_function', p[3], p[5], None, p[8])
     elif len(p) == 12:
-        p[0] = ('unsafe_function', p[2], p[4], p[7], p[9])
-    else:
-        p[0] = ('async_function', p[3], p[5], p[8], p[10])
+        if p[1] == 'unsafe':
+            p[0] = ('unsafe_function_with_type', p[3], p[5], p[8], p[10])
+        else:
+            p[0] = ('async_function_with_type', p[3], p[5], p[8], p[10])
+
 
 def p_loop_statement(p):
     '''loop_statement : LOOP LBRACE statement_list RBRACE'''
@@ -221,7 +343,9 @@ def p_expression(p):
                   | expression DOT NAME
                   | LPAREN expression COMMA expression RPAREN
                   | LBRACKET expression RBRACKET
-                  | closure'''
+                  | closure
+                  | function_call
+                  | macro_call'''
     if len(p) == 2:
         p[0] = p[1]
     elif len(p) == 3:
